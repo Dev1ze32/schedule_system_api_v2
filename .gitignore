@@ -1,0 +1,30 @@
+# ===== Python cache =====
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ===== Virtual environments =====
+venv/
+.venv/
+env/
+.env/
+
+# ===== Environment variables & secrets =====
+.env
+.env.*
+*.key
+*.pem
+secrets.*
+credentials.*
+config.json
+
+# ===== Logs =====
+*.log
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== IDE / Editor =====
+.vscode/
+.idea/

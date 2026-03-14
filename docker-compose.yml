@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: faculty_api
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=${DB_HOST:-mysql}
+      - DB_USER=${DB_USER:-root}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=campus_nav
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEBUG=${DEBUG:-False}
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - faculty_network
+
+  mysql:
+    image: mariadb:10.6
+    container_name: faculty_mysql
+    # This line fixes the "io_uring_queue_init() failed" error on Windows/WSL2
+    command: --innodb-use-native-aio=0 
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=campus_nav
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "--password=${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - faculty_network
+
+  # --- ADD THIS TUNNEL SERVICE BELOW ---
+  tunnel:
+    container_name: cloudflared-tunnel
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # This command creates the temporary, random .trycloudflare.com link
+    command: tunnel --no-autoupdate --url http://api:5000
+    networks:
+      - faculty_network
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  faculty_network:
+    driver: bridge
