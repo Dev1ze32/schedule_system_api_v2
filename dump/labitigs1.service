@@ -1,0 +1,16 @@
+[Unit]
+Description=Labitigs Startup (API + pnc-map + faculty-portal)
+After=network-online.target NetworkManager.service docker.service
+Wants=network-online.target NetworkManager.service
+
+[Service]
+Type=forking
+User=root
+WorkingDirectory=/home/raspi/Documents/labitigs/schedule_system_api-main
+ExecStart=/bin/bash /home/raspi/Documents/labitigs/schedule_system_api-main/start.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
