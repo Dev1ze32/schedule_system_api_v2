@@ -55,13 +55,9 @@ fi
 
 echo "Hotspot '${HOTSPOT_SSID}' is live at ${LOCAL_IP} (open network)"
 
-# --- STEP 2: Start Docker (API) ---
-echo "Starting API via docker compose..."
-cd "$API_DIR" && docker compose up -d
-echo "Docker started."
-sleep 5
+# --- STEP 2: Update .env files BEFORE starting any services ---
+echo "Updating .env files..."
 
-# --- STEP 3: Update .env files ---
 DOTENV_PORTAL="$PORTAL_DIR/.env"
 if [ -f "$DOTENV_PORTAL" ]; then
     sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://${LOCAL_IP}:${PORT_API}/api|g" "$DOTENV_PORTAL"
@@ -82,7 +78,13 @@ else
     echo "ERROR: .env not found at $DOTENV_MAP"
 fi
 
-# --- STEP 4: Start faculty-scheduling-portal FIRST (gets port 5173) ---
+# --- STEP 3: Start Docker (API) ---
+echo "Starting API via docker compose..."
+cd "$API_DIR" && docker compose up -d
+echo "Docker started."
+sleep 5
+
+# --- STEP 4: Start faculty-scheduling-portal (gets port 5173) ---
 echo "Starting faculty-scheduling-portal on port 5173..."
 cd "$PORTAL_DIR" && nohup npm run dev -- --host --port 5173 > /tmp/faculty-portal.log 2>&1 &
 echo "faculty-portal PID: $!"
@@ -90,7 +92,7 @@ echo "faculty-portal PID: $!"
 # Small delay so it claims 5173 before pnc-map starts
 sleep 3
 
-# --- STEP 5: Start pnc-map SECOND (gets port 5174) ---
+# --- STEP 5: Start pnc-map (gets port 5174) ---
 echo "Starting pnc-map on port 5174..."
 cd "$MAP_DIR" && nohup npm run dev -- --host --port 5174 > /tmp/pnc-map.log 2>&1 &
 echo "pnc-map PID: $!"

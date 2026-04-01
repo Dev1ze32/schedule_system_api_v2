@@ -9,7 +9,7 @@ def get_admin_by_username(username):
     conn = get_db_connection()
     if not conn: return None
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         # Note: We check if is_active exists. If your DB doesn't have it, remove 'AND l.is_active = 1'
         query = """
             SELECT a.admin_id, a.admin_name, a.email, l.password_hash 
@@ -26,7 +26,7 @@ def get_all_admins():
     conn = get_db_connection()
     if not conn: return []
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=Tru, buffered=True)
         query = """
             SELECT a.admin_id, a.admin_name, a.email, l.username, l.is_active, l.last_login 
             FROM admins a 

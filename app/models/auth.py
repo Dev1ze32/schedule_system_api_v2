@@ -8,7 +8,7 @@ def get_faculty_login_by_identifier(identifier):
     conn = create_connection()
     if not conn: return None
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         query = """
             SELECT l.* FROM faculty_login l
             JOIN faculty f ON l.faculty_id = f.faculty_id

@@ -40,7 +40,7 @@ def verify_sha256(stored_hash, provided_password):
 
 # --- JWT TOKENS ---
 
-def generate_jwt_token(user_id, username, secret_key, role='faculty', expires_in=3600):
+def generate_jwt_token(user_id, username, secret_key, role='faculty', expires_in=3600, faculty_name=None, department=None):
     payload = {
         'username': username,
         'exp': datetime.utcnow() + timedelta(seconds=expires_in),
@@ -50,8 +50,11 @@ def generate_jwt_token(user_id, username, secret_key, role='faculty', expires_in
     
     if role == 'admin':
         payload['admin_id'] = user_id
+        payload['admin_name'] = username  # admin uses username as display name
     else:
         payload['faculty_id'] = user_id
+        payload['faculty_name'] = faculty_name or username  # ? ADD THIS
+        payload['department'] = department or ''            # ? ADD THIS
 
     return jwt.encode(payload, secret_key, algorithm='HS256')
 

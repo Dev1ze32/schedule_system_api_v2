@@ -8,7 +8,7 @@ def insert_declaration_record(faculty_id, room_id, semester_id, subject_code, cl
     conn = get_db_connection()
     if not conn: return None, "DB Connection Error"
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         
         # Check if semester is locked before inserting (Double check layer)
         cursor.execute("SELECT is_locked FROM semester WHERE semester_id = %s", (semester_id,))
@@ -37,7 +37,7 @@ def update_declaration_record(declaration_id, updates, params):
     conn = get_db_connection()
     if not conn: return False, "Database connection failed"
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         
         # Always update the modified timestamp
         updates.append("last_modified_at = %s")
@@ -76,7 +76,7 @@ def get_declaration_by_id(declaration_id):
     conn = get_db_connection()
     if not conn: return None
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute("SELECT * FROM work_declaration WHERE declaration_id = %s", (declaration_id,))
         return cursor.fetchone()
     finally:
@@ -89,7 +89,7 @@ def get_faculty_schedule_data(faculty_id, semester_id=None):
     conn = get_db_connection()
     if not conn: return []
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         query = """
             SELECT w.declaration_id, f.faculty_name, r.building_name, r.room_name,
                    w.day_of_week, w.time_start, w.time_end, w.subject_code, w.class_section,

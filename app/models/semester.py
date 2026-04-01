@@ -6,7 +6,7 @@ def get_semester_by_id(semester_id):
     conn = create_connection()
     if not conn: return None
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute("SELECT * FROM semester WHERE semester_id = %s", (semester_id,))
         return cursor.fetchone()
     except Error as e:
@@ -19,7 +19,7 @@ def get_active_semester():
     conn = create_connection()
     if not conn: return None
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute("SELECT * FROM semester WHERE is_active = 1 LIMIT 1")
         return cursor.fetchone()
     finally:
@@ -29,7 +29,7 @@ def get_all_semesters():
     conn = create_connection()
     if not conn: return []
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute("SELECT * FROM semester ORDER BY created_at DESC")
         return cursor.fetchall()
     finally:

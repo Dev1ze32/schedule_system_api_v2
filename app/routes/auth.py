@@ -21,18 +21,36 @@ def login():
     
     if not user:
         return jsonify({'error': 'Authentication failed', 'message': message}), 401
-    
+
+    # ADD: fetch full faculty profile from DB
+    from app.database.connection import create_connection
+    full_faculty = None
+    conn = create_connection()
+    if conn:
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT faculty_name, department FROM faculty WHERE faculty_id = %s", 
+                (user['faculty_id'],)
+            )
+            full_faculty = cursor.fetchone()
+        finally:
+            cursor.close()
+            conn.close()
+
     token = generate_jwt_token(
         user['faculty_id'], 
         user['username'], 
         current_app.config['JWT_SECRET_KEY'],
-        role='faculty'
+        role='faculty',
+        faculty_name=full_faculty['faculty_name'] if full_faculty else user['username'],
+        department=full_faculty.get('department', '') if full_faculty else ''
     )
     
     return jsonify({
         'message': 'Login successful', 
         'access_token': token,
-        'faculty': user
+        'faculty': {**user, **(full_faculty or {})}  # merge both dicts
     })
 
 @auth_bp.route('/admin/login', methods=['POST'], strict_slashes=False)

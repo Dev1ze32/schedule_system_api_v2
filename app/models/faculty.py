@@ -37,7 +37,7 @@ def get_all_faculty_details():
     conn = get_db_connection()
     if not conn: return []
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute("SELECT f.faculty_id, f.faculty_name, f.email, f.department, l.username, l.is_active, l.last_login FROM faculty f LEFT JOIN faculty_login l ON f.faculty_id = l.faculty_id ORDER BY f.faculty_name ASC")
         return cursor.fetchall()
     finally:

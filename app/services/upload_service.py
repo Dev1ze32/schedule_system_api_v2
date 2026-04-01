@@ -76,31 +76,75 @@ def process_schedule_upload(file, semester_id, faculty_id):
                 'errors': validation_errors
             }
 
-        # 5. Execution: Insert Data
+        # 5. Execution: Insert Data (FIXED VERSION)
         successful_inserts = 0
         execution_errors = []
 
-        for item in valid_rows_for_insertion:
-            dec_id, db_error = insert_declaration_service(
-                faculty_id=faculty_id,
-                room_id=item['room_id'],
-                semester_id=int(semester_id),
-                subject_code=item['subject_code'],
-                class_section=item['class_section'],
-                day=item['day'],
-                start=item['start_time'], 
-                end=item['end_time'],     
-                status='Pending'
-            )
-            
-            if dec_id: 
-                successful_inserts += 1
-            else: 
-                execution_errors.append(f"Row {item['row_num']}: {db_error}")
+        # Get one connection for the whole file to avoid overhead
+        conn = create_connection()
+        if not conn:
+            return None, {'error': 'Upload failed', 'message': 'Could not establish database connection'}
 
+        try:
+            # IMPORTANT: Using buffered=True to prevent "Unread result found" errors
+            # This ensures Python reads the full response from MySQL immediately.
+            cursor = conn.cursor(dictionary=True, buffered=True)
+
+            for item in valid_rows_for_insertion:
+                try:
+                    # 1. Per-row Semester Lock Check (consumes results immediately due to buffered=True)
+                    cursor.execute("SELECT is_locked FROM semester WHERE semester_id = %s", (int(semester_id),))
+                    sem = cursor.fetchone()
+                    
+                    if sem and sem['is_locked']:
+                        execution_errors.append(f"Row {item['row_num']}: Semester is locked.")
+                        continue
+
+                    # 2. Insert the declaration
+                    insert_query = """
+                        INSERT INTO work_declaration 
+                        (faculty_id, room_id, semester_id, subject_code, class_section, day_of_week, 
+                         time_start, time_end, declaration_status, uploaded_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    """
+                    insert_args = (
+                        faculty_id, 
+                        item['room_id'], 
+                        int(semester_id), 
+                        item['subject_code'], 
+                        item['class_section'], 
+                        item['day'], 
+                        item['start_time'], 
+                        item['end_time'], 
+                        'Pending'
+                    )
+                    
+                    cursor.execute(insert_query, insert_args)
+                    successful_inserts += 1
+
+                except Exception as row_error:
+                    execution_errors.append(f"Row {item['row_num']}: {str(row_error)}")
+
+            # Commit all changes at once after the loop finishes
+            conn.commit()
+
+        except Exception as global_error:
+            if conn: conn.rollback()
+            print(f"Global Insertion Error: {global_error}")
+            return None, {'error': 'Database processing failed', 'message': str(global_error)}
+
+        finally:
+            # Clean up: Close cursor and return connection to the pool
+            if 'cursor' in locals(): cursor.close()
+            if conn.is_connected(): conn.close()
+
+        # Final Return Structure
         return {
-            'message': 'Upload successful!',
-            'summary': {'successful': successful_inserts, 'failed': len(execution_errors)},
+            'message': 'Upload processed',
+            'summary': {
+                'successful': successful_inserts, 
+                'failed': len(execution_errors)
+            },
             'errors': execution_errors
         }, None
 

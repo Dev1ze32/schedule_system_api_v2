@@ -8,7 +8,7 @@ def get_room_id(room_name):
     conn = get_db_connection()
     if not conn: return None
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         query = "SELECT room_id FROM room WHERE LOWER(room_name) = LOWER(%s) LIMIT 1"
         cursor.execute(query, (room_name.strip(),))
         result = cursor.fetchone()
@@ -34,7 +34,7 @@ def get_all_rooms():
     conn = get_db_connection()
     if not conn: return []
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         query = "SELECT * FROM room ORDER BY building_name ASC, room_name ASC"
         cursor.execute(query)
         return cursor.fetchall()
