@@ -12,9 +12,11 @@ def faculty_exists(faculty_id):
     conn = get_db_connection()
     if not conn: return False
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True) # ? FIX: Add buffered=True
         cursor.execute("SELECT 1 FROM faculty WHERE faculty_id = %s", (faculty_id,))
-        return cursor.fetchone() is not None
+        result = cursor.fetchone()
+        cursor.fetchall() # ? FIX: Clear the buffer
+        return result is not None
     finally:
         if conn.is_connected(): cursor.close(); conn.close()
 

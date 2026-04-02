@@ -12,16 +12,41 @@ MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 30
 
 # --- AUTHENTICATION ---
+def _clear_cursor_results(cursor):
+    """Stronger cleanup - use this everywhere now"""
+    if not cursor:
+        return
+    try:
+        # Consume current result set if any
+        if cursor.with_rows:
+            cursor.fetchall()
+    except Exception:
+        pass
+    try:
+        # Clear any multi-result sets
+        while cursor.nextset():
+            try:
+                if cursor.with_rows:
+                    cursor.fetchall()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 def authenticate_faculty_service(identifier, password):
     if not identifier or not password:
         return None, "Invalid credentials"
-    
-    conn = create_connection()
-    if not conn: return None, "Database connection error"
-    
+
+    conn = None
+    cursor = None
     try:
-        cursor = conn.cursor(dictionary=True)
+        conn = create_connection()
+        if not conn:
+            return None, "Database connection error"
+
+        cursor = conn.cursor(dictionary=True, buffered=True)
+
         query = """
             SELECT l.* FROM faculty_login l
             JOIN faculty f ON l.faculty_id = f.faculty_id
@@ -30,43 +55,62 @@ def authenticate_faculty_service(identifier, password):
         """
         cursor.execute(query, (identifier, identifier))
         user = cursor.fetchone()
-        
+
         if not user:
             return None, "Invalid credentials"
-        
-        # Check lockout
+
         if user.get('locked_until') and datetime.now() < user['locked_until']:
             return None, "Account is temporarily locked. Please try again later."
-        elif user.get('locked_until'):
-            # Unlock
-            cursor.execute("UPDATE faculty_login SET locked_until = NULL, failed_attempts = 0 WHERE login_id = %s", (user['login_id'],))
+
+        # Unlock if lockout expired
+        if user.get('locked_until'):
+            cursor.execute(
+                "UPDATE faculty_login SET locked_until = NULL, failed_attempts = 0 WHERE login_id = %s",
+                (user['login_id'],)
+            )
             conn.commit()
-            
+
         if not user.get('is_active'):
             return None, "Account is disabled."
-            
-        # Verify Password
+
         if verify_password(user['password_hash'], user['password_salt'], password):
-            cursor.execute("UPDATE faculty_login SET failed_attempts = 0, last_login = %s WHERE login_id = %s", (datetime.now(), user['login_id']))
+            cursor.execute(
+                "UPDATE faculty_login SET failed_attempts = 0, last_login = %s WHERE login_id = %s",
+                (datetime.now(), user['login_id'])
+            )
             conn.commit()
             return {'faculty_id': user['faculty_id'], 'username': user['username']}, "Success"
         else:
             failed_attempts = user.get('failed_attempts', 0) + 1
             if failed_attempts >= MAX_LOGIN_ATTEMPTS:
                 lockout = datetime.now() + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
-                cursor.execute("UPDATE faculty_login SET failed_attempts = %s, locked_until = %s WHERE login_id = %s", (failed_attempts, lockout, user['login_id']))
-                conn.commit()
-                return None, f"Too many failed attempts. Locked for {LOCKOUT_DURATION_MINUTES} mins."
+                cursor.execute(
+                    "UPDATE faculty_login SET failed_attempts = %s, locked_until = %s WHERE login_id = %s",
+                    (failed_attempts, lockout, user['login_id'])
+                )
             else:
-                cursor.execute("UPDATE faculty_login SET failed_attempts = %s WHERE login_id = %s", (failed_attempts, user['login_id']))
-                conn.commit()
-                return None, f"Invalid credentials. {MAX_LOGIN_ATTEMPTS - failed_attempts} attempts remaining."
-                
-    except Error as e:
+                cursor.execute(
+                    "UPDATE faculty_login SET failed_attempts = %s WHERE login_id = %s",
+                    (failed_attempts, user['login_id'])
+                )
+            conn.commit()
+            return None, f"Invalid credentials. {MAX_LOGIN_ATTEMPTS - failed_attempts} attempts remaining."
+
+    except Exception as e:
         print(f"Auth error: {e}")
         return None, "Authentication failed"
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def authenticate_admin_service(username, password):
     """

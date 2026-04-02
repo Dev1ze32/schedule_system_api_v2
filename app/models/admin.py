@@ -1,108 +1,214 @@
 from app.database.connection import create_connection as get_db_connection
 from mysql.connector import Error
-from datetime import datetime
 
-# --- ADMIN RETRIEVAL ---
+
+def _clear_cursor_results(cursor):
+    if not cursor:
+        return
+    try:
+        if cursor.with_rows:
+            cursor.fetchall()
+    except Exception:
+        pass
+    try:
+        while cursor.nextset():
+            try:
+                if cursor.with_rows:
+                    cursor.fetchall()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 def get_admin_by_username(username):
-    """Fetches admin login details for authentication."""
-    conn = get_db_connection()
-    if not conn: return None
+    conn = None
+    cursor = None
     try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+
         cursor = conn.cursor(dictionary=True, buffered=True)
-        # Note: We check if is_active exists. If your DB doesn't have it, remove 'AND l.is_active = 1'
+        _clear_cursor_results(cursor)
+
         query = """
-            SELECT a.admin_id, a.admin_name, a.email, l.password_hash 
-            FROM admins a 
-            JOIN admin_login l ON a.admin_id = l.admin_id 
+            SELECT a.admin_id, a.admin_name, a.email, l.password_hash
+            FROM admins a
+            JOIN admin_login l ON a.admin_id = l.admin_id
             WHERE l.username = %s AND l.is_active = 1
         """
         cursor.execute(query, (username,))
         return cursor.fetchone()
+
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 def get_all_admins():
-    conn = get_db_connection()
-    if not conn: return []
+    conn = None
+    cursor = None
     try:
-        cursor = conn.cursor(dictionary=Tru, buffered=True)
+        conn = get_db_connection()
+        if not conn:
+            return []
+
+        cursor = conn.cursor(dictionary=True, buffered=True)
         query = """
-            SELECT a.admin_id, a.admin_name, a.email, l.username, l.is_active, l.last_login 
-            FROM admins a 
-            JOIN admin_login l ON a.admin_id = l.admin_id 
+            SELECT a.admin_id, a.admin_name, a.email, l.username, l.is_active, l.last_login
+            FROM admins a
+            JOIN admin_login l ON a.admin_id = l.admin_id
             ORDER BY a.admin_name ASC
         """
         cursor.execute(query)
         return cursor.fetchall()
-    finally:
-        if conn.is_connected(): cursor.close(); conn.close()
 
-# --- ADMIN CREATION & MANAGEMENT ---
+    finally:
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 def insert_admin_profile(name, email):
-    conn = get_db_connection()
-    if not conn: return None
+    conn = None
+    cursor = None
     try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+
         cursor = conn.cursor()
-        # Assuming 'admins' table HAS created_at. If this fails too, remove ', created_at' and ', NOW()'
-        cursor.execute("INSERT INTO admins (admin_name, email, created_at) VALUES (%s, %s, NOW())", (name, email))
+        cursor.execute(
+            "INSERT INTO admins (admin_name, email, created_at) VALUES (%s, %s, NOW())",
+            (name, email)
+        )
         conn.commit()
         return cursor.lastrowid
     except Error as e:
-        print(f"DB Error (Insert Profile): {e}") 
+        print(f"DB Error (Insert Profile): {e}")
         return None
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 def insert_admin_login(admin_id, username, password_hash):
-    conn = get_db_connection()
-    if not conn: return None
+    conn = None
+    cursor = None
     try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+
         cursor = conn.cursor()
-        
-        # --- FIX: Removed 'created_at' from this query ---
         query = """
-            INSERT INTO admin_login (admin_id, username, password_hash, is_active) 
+            INSERT INTO admin_login (admin_id, username, password_hash, is_active)
             VALUES (%s, %s, %s, 1)
         """
         cursor.execute(query, (admin_id, username, password_hash))
         conn.commit()
         return cursor.lastrowid
     except Error as e:
-        print(f"DB Error (Insert Login): {e}") # This will print new errors if any
+        print(f"DB Error (Insert Login): {e}")
         return None
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 def update_admin_password_record(admin_id, new_hash):
-    conn = get_db_connection()
-    if not conn: return False, "DB Connection Error"
+    conn = None
+    cursor = None
     try:
+        conn = get_db_connection()
+        if not conn:
+            return False, "DB Connection Error"
+
         cursor = conn.cursor()
-        
-        # --- FIX: Removed 'updated_at' just in case that is missing too ---
         query = "UPDATE admin_login SET password_hash=%s WHERE admin_id=%s"
-        
         cursor.execute(query, (new_hash, admin_id))
         conn.commit()
         return True, "Password reset successfully"
+
     except Error as e:
         return False, str(e)
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 def delete_admin_data(admin_id):
-    conn = get_db_connection()
-    if not conn: return False, "DB Connection Failed"
+    conn = None
+    cursor = None
     try:
+        conn = get_db_connection()
+        if not conn:
+            return False, "DB Connection Failed"
+
         cursor = conn.cursor()
         cursor.execute("DELETE FROM admin_login WHERE admin_id = %s", (admin_id,))
         cursor.execute("DELETE FROM admins WHERE admin_id = %s", (admin_id,))
         conn.commit()
         return True, "Admin account removed successfully"
+
     except Error as e:
-        if conn: conn.rollback()
+        if conn:
+            conn.rollback()
         return False, str(e)
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass

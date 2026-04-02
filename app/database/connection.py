@@ -20,6 +20,7 @@ def init_db_pool():
     global db_pool
     try:
         db_pool = pooling.MySQLConnectionPool(
+            autocommit=False,
             pool_name="campus_nav_pool",
             pool_size=20,
             pool_reset_session=True,
@@ -35,18 +36,21 @@ init_db_pool()
 
 def create_connection():
     """
-    Get a connection from the pool.
+    Get a connection from the pool + FORCE full reset.
+    This fixes the 'Unread result found' issue when using N/A rooms.
     """
     global db_pool
     if db_pool is None:
         init_db_pool()
-        
+
     try:
         if db_pool:
             conn = db_pool.get_connection()
             if conn.is_connected():
+                # This is the nuclear option that clears EVERYTHING
+                conn.cmd_reset_connection()        # ? Add this line
                 return conn
     except Error as e:
         print(f"Error getting connection from pool: {e}")
-    
+
     return None

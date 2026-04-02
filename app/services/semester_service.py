@@ -68,9 +68,11 @@ def activate_semester_service(semester_id):
     5. Updates pending declarations
     """
     conn = create_connection()
+    if conn:
+        conn.cmd_reset_connection()
     if not conn: return False, "Database connection failed", 0
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         conn.start_transaction(isolation_level='SERIALIZABLE')
         
         cursor.execute("SELECT * FROM semester WHERE semester_id = %s FOR UPDATE", (semester_id,))
@@ -135,7 +137,7 @@ def get_semester_statistics(semester_id):
     if not conn: return None
     
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         
         query = """
         SELECT 

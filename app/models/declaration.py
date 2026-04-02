@@ -13,6 +13,7 @@ def insert_declaration_record(faculty_id, room_id, semester_id, subject_code, cl
         # Check if semester is locked before inserting (Double check layer)
         cursor.execute("SELECT is_locked FROM semester WHERE semester_id = %s", (semester_id,))
         sem = cursor.fetchone()
+        cursor.fetchall()
         if sem and sem['is_locked']: 
             return None, "Semester is locked"
             

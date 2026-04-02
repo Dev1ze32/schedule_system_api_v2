@@ -4,25 +4,34 @@ from mysql.connector import Error
 # --- READ OPERATIONS ---
 
 def get_room_id(room_name):
-    """Finds a room ID by its name (case-insensitive)."""
     conn = get_db_connection()
     if not conn: return None
     try:
+        # Use a context manager for the cursor if possible, or manual cleanup
         cursor = conn.cursor(dictionary=True, buffered=True)
+        conn.consume_results()
         query = "SELECT room_id FROM room WHERE LOWER(room_name) = LOWER(%s) LIMIT 1"
         cursor.execute(query, (room_name.strip(),))
         result = cursor.fetchone()
+        
+        # IMPORTANT: Always consume any remaining results before closing
+        cursor.fetchall() 
+        
         return result['room_id'] if result else None
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
-
+        # Ensure cursor is closed before connection
+        if 'cursor' in locals(): cursor.close()
+        if conn.is_connected(): conn.close()
 def room_exists(room_id):
     conn = get_db_connection() 
     if not conn: return False
     try:
-        cursor = conn.cursor()
+        # Use buffered cursor to help with sync
+        cursor = conn.cursor(buffered=True) 
         cursor.execute("SELECT 1 FROM room WHERE room_id = %s", (room_id,))
-        return cursor.fetchone() is not None
+        result = cursor.fetchone()
+        cursor.fetchall() # ? FIX: Clear the buffer
+        return result is not None
     finally:
         if conn.is_connected(): cursor.close(); conn.close()
 

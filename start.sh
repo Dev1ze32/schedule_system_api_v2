@@ -80,7 +80,7 @@ fi
 
 # --- STEP 3: Start Docker (API) ---
 echo "Starting API via docker compose..."
-cd "$API_DIR" && docker compose up -d
+cd "$API_DIR" && docker compose build --no-cache api && docker compose up -d || echo "ERROR: Docker compose failed!" 
 echo "Docker started."
 sleep 5
 

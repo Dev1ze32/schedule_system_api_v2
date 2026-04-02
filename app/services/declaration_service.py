@@ -5,70 +5,110 @@ from app.models.faculty import faculty_exists
 from app.services.conflict_detector import check_schedule_conflicts
 from app.utils.validators import validate_time_range, VALID_DAYS
 from app.models.declaration import (
-    update_declaration_record, delete_declaration_record, 
+    update_declaration_record, delete_declaration_record,
     get_declaration_by_id
 )
 from datetime import datetime
 
-def insert_declaration_service(faculty_id, room_id, semester_id, subject_code, class_section, day, start, end, status='Pending'):
-    """
-    Orchestrates the creation of a schedule declaration:
-    1. Validates inputs (Time, Day)
-    2. Checks foreign key existence (Faculty, Room, Semester)
-    3. Checks business rules (Semester Locks)
-    4. Checks Logic (Schedule Conflicts)
-    5. Inserts the record
-    """
-    
-    # 1. Basic Input Validation
-    if day not in VALID_DAYS:
-        return None, "Invalid day"
-        
-    valid_time, time_error = validate_time_range(start, end)
-    if not valid_time:
-        return None, time_error
+def _clear_cursor_results(cursor):
+    """Stronger cleanup - use this everywhere now"""
+    if not cursor:
+        return
+    try:
+        # Consume current result set if any
+        if cursor.with_rows:
+            cursor.fetchall()
+    except Exception:
+        pass
+    try:
+        # Clear any multi-result sets
+        while cursor.nextset():
+            try:
+                if cursor.with_rows:
+                    cursor.fetchall()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
-    # 2. Existence Checks (Delegated to Models)
-    # Note: These are often implicitly handled by DB constraints, but explicit checks provide better error messages.
-    if not faculty_exists(faculty_id):
-        return None, "Faculty not found"
-    
-    if not room_exists(room_id):
-        return None, "Room not found"
 
-    # 3. Semester Lock Check
-    semester = get_semester_by_id(semester_id)
-    if not semester:
-        return None, "Semester not found"
-        
-    if semester['is_locked']:
-        return None, "Semester is locked. No new declarations allowed."
+def insert_declaration_service(faculty_id, room_id, semester_id, subject_code, class_section, day, start, end, na_room_id=None, status='Pending'):
+    from app.database.connection import create_connection
+    from app.utils.validators import validate_time_range, VALID_DAYS
 
-    # 4. Conflict Check (Delegated to Conflict Service)
-    has_conflict, error_msg = check_schedule_conflicts(
-        semester_id, day, start, end, room_id, faculty_id
-    )
-    if has_conflict:
-        return None, error_msg
+    conn = None
+    cursor = None
+    try:
+        if day not in VALID_DAYS:
+            return None, "Invalid day"
 
-    # 5. Insert Record (Delegated to Model)
-    declaration_id, db_error = insert_declaration_record(
-        faculty_id=faculty_id,
-        room_id=room_id,
-        semester_id=semester_id,
-        subject_code=subject_code,
-        class_section=class_section,
-        day=day,
-        start=start,
-        end=end,
-        status=status
-    )
-    
-    if db_error:
-        return None, db_error
-        
-    return declaration_id, None
+        valid_time, time_error = validate_time_range(start, end)
+        if not valid_time:
+            return None, time_error
 
+        conn = create_connection()
+        if conn:
+            conn.cmd_reset_connection()
+        if not conn:
+            return None, "Database Connection Failed"
+
+        cursor = conn.cursor(dictionary=True, buffered=True)
+        _clear_cursor_results(cursor)
+
+        # Faculty & Room checks
+        cursor.execute("SELECT 1 FROM faculty WHERE faculty_id = %s LIMIT 1", (faculty_id,))
+        if not cursor.fetchall():
+            return None, "Faculty not found"
+
+        cursor.execute("SELECT 1 FROM room WHERE room_id = %s LIMIT 1", (room_id,))
+        if not cursor.fetchall():
+            return None, "Room not found"
+
+        # Semester lock
+        cursor.execute("SELECT is_locked FROM semester WHERE semester_id = %s LIMIT 1", (semester_id,))
+        semester = cursor.fetchall()
+        if not semester:
+            return None, "Semester not found"
+        if semester[0].get('is_locked'):
+            return None, "Semester is locked."
+
+        # === CONFLICT CHECK (this is the N/A hotspot) ===
+        has_conflict, error_msg = check_schedule_conflicts(
+            semester_id, day, start, end, room_id, faculty_id
+        )
+
+        if has_conflict:
+            return None, error_msg
+
+        # === INSERT ===
+        insert_query = """
+            INSERT INTO work_declaration
+            (faculty_id, room_id, semester_id, subject_code, class_section, day_of_week,
+             time_start, time_end, declaration_status, uploaded_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """
+        cursor.execute(insert_query, (faculty_id, room_id, semester_id, subject_code, class_section, day, start, end, status))
+        conn.commit()
+
+        return cursor.lastrowid, None
+
+    except Exception as e:
+        if conn and conn.is_connected():
+            conn.rollback()
+        return None, f"DB Error: {str(e)}"
+
+    finally:
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
 def update_declaration_service(declaration_id, faculty_id, room_id=None, subject_code=None, class_section=None, day=None, start=None, end=None):
     """
     Handles updating a schedule declaration with conflict checks.

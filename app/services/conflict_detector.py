@@ -1,62 +1,97 @@
 from app.database.connection import create_connection
-from mysql.connector import Error
+
+def _clear_cursor_results(cursor):
+    """Strongest version - use this one everywhere"""
+    if not cursor:
+        return
+    try:
+        if cursor.with_rows:
+            cursor.fetchall()
+    except Exception:
+        pass
+    try:
+        while cursor.nextset():
+            try:
+                if cursor.with_rows:
+                    cursor.fetchall()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 def check_schedule_conflicts(semester_id, day, start_time, end_time, room_id, faculty_id, exclude_declaration_id=None):
-    conn = create_connection()
-    if not conn: return True, "Database Connection Failed"
-    
+    """
+    Ultra-safe conflict checker for N/A rooms.
+    """
+    conn = None
+    cursor = None
     try:
-        cursor = conn.cursor(dictionary=True)
-        
-        # 1. Check Room Conflict
-        query_room = """
-            SELECT faculty_id, time_start, time_end, subject_code 
-            FROM work_declaration 
-            WHERE semester_id = %s 
-            AND room_id = %s 
-            AND day_of_week = %s
-            AND time_start < %s 
-            AND time_end > %s
-            AND declaration_status != 'Rejected'
-        """
-        params_room = [semester_id, room_id, day, end_time, start_time]
-        
-        if exclude_declaration_id:
-            query_room += " AND declaration_id != %s"
-            params_room.append(exclude_declaration_id)
-            
-        cursor.execute(query_room, params_room)
-        conflict = cursor.fetchone()
-        
-        if conflict:
-            return True, f"Room Conflict: {conflict['subject_code']} is already scheduled here from {conflict['time_start']} to {conflict['time_end']}."
+        conn = create_connection()
+        if conn:
+            conn.cmd_reset_connection()
+        if not conn:
+            return True, "Database Connection Failed"
 
-        # 2. Check Faculty Conflict
-        query_faculty = """
-            SELECT room_id, time_start, time_end, subject_code
+        cursor = conn.cursor(dictionary=True, buffered=True)
+        _clear_cursor_results(cursor)   # ← Extra safety
+
+        # 1. Get N/A room ID
+        cursor.execute("""
+            SELECT room_id 
+            FROM room 
+            WHERE TRIM(LOWER(room_name)) = 'n/a' 
+            LIMIT 1
+        """)
+        na_res = cursor.fetchall()
+        na_room_id = na_res[0]['room_id'] if na_res else None
+
+        is_na_room = (na_room_id is not None and 
+                     str(room_id).strip() == str(na_room_id).strip())
+
+        # 2. Conflict query
+        query = """
+            SELECT subject_code 
             FROM work_declaration
-            WHERE semester_id = %s
-            AND faculty_id = %s
-            AND day_of_week = %s
-            AND time_start < %s
-            AND time_end > %s
-            AND declaration_status != 'Rejected'
+            WHERE semester_id = %s 
+              AND day_of_week = %s
+              AND (time_start < %s AND time_end > %s)
+              AND declaration_status != 'Rejected'
         """
-        params_faculty = [semester_id, faculty_id, day, end_time, start_time]
-        
+        params = [semester_id, day, end_time, start_time]
+
         if exclude_declaration_id:
-            query_faculty += " AND declaration_id != %s"
-            params_faculty.append(exclude_declaration_id)
-            
-        cursor.execute(query_faculty, params_faculty)
-        conflict = cursor.fetchone()
-        
-        if conflict:
-            return True, f"Schedule Conflict: You already have {conflict['subject_code']} scheduled from {conflict['time_start']} to {conflict['time_end']}."
+            query += " AND declaration_id != %s"
+            params.append(exclude_declaration_id)
+
+        if is_na_room:
+            query += " AND faculty_id = %s"
+            params.append(faculty_id)
+        else:
+            query += " AND (faculty_id = %s OR room_id = %s)"
+            params.extend([faculty_id, room_id])
+
+        cursor.execute(query, tuple(params))
+        conflicts = cursor.fetchall()
+
+        if conflicts:
+            return True, f"Conflict detected with {conflicts[0]['subject_code']}"
 
         return False, None
 
-    except Error as e:
-        return True, f"Validation Error: {str(e)}"
+    except Exception as e:
+        print(f"CRITICAL DB ERROR IN check_schedule_conflicts: {str(e)}")
+        return True, f"System Error: {str(e)}"
+
     finally:
-        if conn.is_connected(): cursor.close(); conn.close()
+        if cursor:
+            try:
+                _clear_cursor_results(cursor)
+                cursor.close()
+            except Exception:
+                pass
+        if conn and conn.is_connected():
+            try:
+                conn.close()
+            except Exception:
+                pass
