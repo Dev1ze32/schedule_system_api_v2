@@ -145,23 +145,23 @@ def update_declaration_service(declaration_id, faculty_id, room_id=None, subject
     updates = []
     params = []
 
-    if room_id: 
-        updates.append("room_id = %s") 
+    if room_id is not None:
+        updates.append("room_id = %s")
         params.append(room_id)
-    if subject_code: 
-        updates.append("subject_code = %s") 
+    if subject_code is not None:
+        updates.append("subject_code = %s")
         params.append(subject_code)
-    if class_section: 
-        updates.append("class_section = %s") 
+    if class_section is not None:
+        updates.append("class_section = %s")
         params.append(class_section)
-    if day: 
-        updates.append("day_of_week = %s") 
+    if day is not None:
+        updates.append("day_of_week = %s")
         params.append(day)
-    if start: 
-        updates.append("time_start = %s") 
+    if start is not None:
+        updates.append("time_start = %s")
         params.append(start)
-    if end: 
-        updates.append("time_end = %s") 
+    if end is not None:
+        updates.append("time_end = %s")
         params.append(end)
     
     if not updates:

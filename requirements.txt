@@ -38,3 +38,14 @@ Werkzeug==3.1.5
 wrapt==2.0.1
 yarg==0.1.10
 gunicorn==21.2.0
+
+# ── Multi-format schedule upload (parser.py, image_parser.py, TableLinesRemover.py) ──
+# DOCX support  (import docx  in parser.py)
+python-docx==1.1.2
+# PDF support   (import pdfplumber  in parser.py)
+pdfplumber==0.11.4
+# Image / OCR support  (import cv2  in image_parser.py / TableLinesRemover.py)
+# Use the headless build inside Docker – no GUI/display dependencies
+opencv-python-headless==4.10.0.84
+# Pillow is pulled in by pdfplumber anyway; pin it explicitly for stability
+Pillow==10.4.0

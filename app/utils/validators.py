@@ -69,8 +69,8 @@ def validate_time_range(start_time, end_time):
         end_dt = datetime.combine(datetime.today(), end)
         duration = (end_dt - start_dt).total_seconds() / 3600
         
-        if duration > 8:
-            return False, "Class duration cannot exceed 8 hours"
+        if duration > 10:
+            return False, "Class duration cannot exceed 10 hours"
             
         return True, None
     except ValueError:

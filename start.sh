@@ -16,6 +16,47 @@ PORT_WEB=5174
 HOTSPOT_SSID="Group 19 Kiosk"
 HOTSPOT_CON="kiosk-hotspot"
 LOCAL_IP="10.42.0.1"
+# --- STEP 0: Fix system clock WITHOUT internet ---
+echo "========================================"
+echo "CLOCK SYNC: $(date)"
+echo "========================================"
+
+# First, restore from fake-hwclock (last saved time from disk)
+fake-hwclock load
+echo "Restored from fake-hwclock: $(date)"
+
+# Check if restored time is reasonable (after Jan 1 2024)
+CURRENT_EPOCH=$(date +%s)
+MIN_EPOCH=1704067200  # Jan 1, 2024
+
+if [ "$CURRENT_EPOCH" -lt "$MIN_EPOCH" ]; then
+    echo "WARNING: Clock looks wrong ($(date)), trying last-shutdown-time..."
+    
+    # Fallback: use our manually saved shutdown time
+    if [ -f /etc/last-shutdown-time ]; then
+        SAVED_EPOCH=$(cat /etc/last-shutdown-time)
+        # Add 30 seconds buffer for boot time
+        RESTORED_EPOCH=$((SAVED_EPOCH + 30))
+        date -s "@$RESTORED_EPOCH"
+        echo "Clock restored from shutdown record: $(date)"
+    else
+        echo "No shutdown time record found, clock may be wrong."
+    fi
+else
+    echo "Clock looks OK: $(date)"
+fi
+
+# Try NTP if internet is available (don't wait long � 5 sec max)
+if ping -c 1 -W 2 8.8.8.8 &>/dev/null; then
+    echo "Internet detected � syncing NTP..."
+    timedatectl set-ntp true
+    sleep 5
+    echo "NTP sync attempted: $(date)"
+else
+    echo "No internet � using saved clock. This is OK for kiosk mode."
+fi
+
+echo "Final clock: $(date)"
 
 # --- STEP 1: Start Hotspot ---
 echo "Setting up hotspot: '${HOTSPOT_SSID}'..."
@@ -96,6 +137,16 @@ sleep 3
 echo "Starting pnc-map on port 5174..."
 cd "$MAP_DIR" && nohup npm run dev -- --host --port 5174 > /tmp/pnc-map.log 2>&1 &
 echo "pnc-map PID: $!"
+
+# --- STEP 6: Save time every 10 minutes while kiosk runs ---
+echo "Starting periodic time saver..."
+(while true; do
+    sleep 600
+    fake-hwclock save
+    date +%s > /etc/last-shutdown-time
+    echo "$(date): Time checkpoint saved"
+done) &
+echo "Time saver PID: $!"
 
 echo "========================================"
 echo "ALL SERVICES STARTED"
